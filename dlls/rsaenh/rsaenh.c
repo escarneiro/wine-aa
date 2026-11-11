@@ -3403,7 +3403,9 @@ static BOOL import_plaintext_key(HCRYPTPROV hProv, const BYTE *pbData, DWORD dwD
         return FALSE;
     }
 
-    if (dwFlags & CRYPT_IPSEC_HMAC_KEY)
+    /* CRYPT_IPSEC_HMAC_KEY only allows importing RC2 keys longer than 16 bytes
+     * (used for HMAC keys); other algorithms are imported as they are. */
+    if ((dwFlags & CRYPT_IPSEC_HMAC_KEY) && pBlobHeader->aiKeyAlg == CALG_RC2)
     {
         *phKey = new_key(hProv, CALG_HMAC, 0, &pCryptKey);
         if (*phKey == (HCRYPTKEY)INVALID_HANDLE_VALUE)

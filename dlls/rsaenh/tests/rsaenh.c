@@ -2941,6 +2941,65 @@ static void test_import_hmac(void)
         }
     }
 }
+
+static void test_import_3des_ipsec_hmac_flag(void)
+{
+    static const BYTE key_value[24] =
+    {
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98,
+        0x76, 0x54, 0x32, 0x10, 0x89, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67,
+    };
+    struct
+    {
+        BLOBHEADER header;
+        DWORD key_len;
+        BYTE key[24];
+    } blob;
+    BYTE data[2][8];
+    HCRYPTKEY key[2];
+    DWORD value, size, flags, i;
+    BOOL ret;
+
+    blob.header.bType = PLAINTEXTKEYBLOB;
+    blob.header.bVersion = CUR_BLOB_VERSION;
+    blob.header.reserved = 0;
+    blob.header.aiKeyAlg = CALG_3DES;
+    blob.key_len = sizeof(key_value);
+    memcpy(blob.key, key_value, sizeof(key_value));
+
+    /* CRYPT_IPSEC_HMAC_KEY doesn't turn a 3DES key into an HMAC key. */
+    for (i = 0; i < 2; i++)
+    {
+        flags = i ? CRYPT_IPSEC_HMAC_KEY : 0;
+        winetest_push_context("flags %#lx", flags);
+
+        ret = CryptImportKey(hProv, (BYTE *)&blob, sizeof(blob), 0, flags, &key[i]);
+        ok(ret, "CryptImportKey failed, error %#lx.\n", GetLastError());
+
+        value = 0xdeadbeef;
+        size = sizeof(value);
+        ret = CryptGetKeyParam(key[i], KP_ALGID, (BYTE *)&value, &size, 0);
+        ok(ret, "CryptGetKeyParam failed, error %#lx.\n", GetLastError());
+        ok(value == CALG_3DES, "Unexpected algorithm %#lx.\n", value);
+
+        value = 0xdeadbeef;
+        size = sizeof(value);
+        ret = CryptGetKeyParam(key[i], KP_BLOCKLEN, (BYTE *)&value, &size, 0);
+        ok(ret, "CryptGetKeyParam failed, error %#lx.\n", GetLastError());
+        ok(value == 64, "Unexpected block length %lu.\n", value);
+
+        memcpy(data[i], "12345678", 8);
+        size = 8;
+        ret = CryptEncrypt(key[i], 0, FALSE, 0, data[i], &size, sizeof(data[i]));
+        ok(ret, "CryptEncrypt failed, error %#lx.\n", GetLastError());
+        ok(size == 8, "Unexpected size %lu.\n", size);
+
+        CryptDestroyKey(key[i]);
+        winetest_pop_context();
+    }
+
+    ok(!memcmp(data[0], data[1], sizeof(data[0])), "Got different ciphertext.\n");
+}
         
 static void test_schannel_provider(void)
 {
@@ -4618,6 +4677,7 @@ START_TEST(rsaenh)
         test_rsa_encrypt();
         test_import_export();
         test_import_hmac();
+        if(!BASE_PROV) test_import_3des_ipsec_hmac_flag();
         test_enum_container();
         if(!BASE_PROV) test_key_derivation(STRONG_PROV ? "STRONG" : "ENH");
         test_rc2_import();
