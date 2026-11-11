@@ -7729,6 +7729,15 @@ static const struct query_test xslpattern_test[] =
 
     /* Predicate at different levels requiring index fixup vs XPath */
     { "root//elem[0][0]", "E1.E2.D1" },
+
+    /* Names starting with "not" are not the not() function */
+    { "notificationid", "" },
+    { "root/note", "" },
+    { "root//elem[nothing]", "" },
+    { "root//elem[not(d)]", "E3.E2.D1" },
+    { "root//elem[not (d)]", "E3.E2.D1" },
+    { "not(", NULL },
+    { "root//elem[not(]", NULL },
     { NULL }
 };
 
