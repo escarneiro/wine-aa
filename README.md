@@ -1,3 +1,13 @@
+## WINE-AA
+
+wine-aa is an independent fork of Wine that accepts AI-assisted code.
+It follows upstream Wine and adds its own fixes on top. It is not
+affiliated with the Wine project.
+
+**Before contributing, read [CONTRIBUTING.md](CONTRIBUTING.md).** It covers
+the clean-room rules, how to disclose AI assistance, and how to test a fix.
+
+
 ## INTRODUCTION
 
 Wine is a program which allows running Microsoft Windows programs
