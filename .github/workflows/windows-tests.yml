@@ -1,0 +1,96 @@
+name: Windows tests
+
+# Runs the tests listed in .github/windows-tests on real Windows, to check
+# that their expected results describe what Windows actually does. The
+# test programs are cross-compiled on Linux, then run on a Windows machine.
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          path: src
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64 flex bison
+
+      - name: Configure
+        run: |
+          mkdir build
+          cd build
+          ../src/configure --enable-archs=i386,x86_64 \
+            --without-x --without-freetype --without-alsa --without-capi \
+            --without-cups --without-dbus --without-ffmpeg --without-gnutls \
+            --without-gphoto --without-gstreamer --without-krb5 --without-netapi \
+            --without-opengl --without-oss --without-pcap --without-pulse \
+            --without-sane --without-sdl --without-udev --without-usb \
+            --without-v4l2 --without-vulkan --without-wayland
+
+      - name: Build test programs
+        working-directory: build
+        run: |
+          mkdir -p ../tests
+          grep -v '^[[:space:]]*\(#\|$\)' ../src/.github/windows-tests | while read -r module test; do
+            name=$(basename "$module")
+            for arch in i386 x86_64; do
+              exe="$module/tests/$arch-windows/${name}_test.exe"
+              make -j"$(nproc)" "$exe"
+              mkdir -p "../tests/$arch"
+              cp "$exe" "../tests/$arch/"
+            done
+          done
+          cp ../src/.github/windows-tests ../tests/
+
+      - name: Upload test programs
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-tests
+          path: tests
+
+  run:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download test programs
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-tests
+          path: tests
+
+      - name: Run tests
+        shell: bash
+        working-directory: tests
+        run: |
+          grep -v '^[[:space:]]*\(#\|$\)' windows-tests | while read -r module test; do
+            name=$(basename "$module")
+            for arch in i386 x86_64; do
+              echo "::group::$arch $name:$test"
+              timeout 600 "./$arch/${name}_test.exe" "$test" > out.txt 2>&1 || echo "FAILED" > failed
+              cat out.txt
+              echo "::endgroup::"
+              # Publish the summary, failures and "RESULT" lines as an
+              # annotation, which can be read without logging in.
+              summary=$(grep -E "tests executed|Test failed|RESULT " out.txt | head -40 |
+                        sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+              echo "::notice title=$arch $name:$test::$summary"
+            done
+          done
+          ! test -e failed

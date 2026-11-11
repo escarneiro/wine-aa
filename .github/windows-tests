@@ -1,0 +1,3 @@
+# Tests that CI runs on real Windows, to check that their expected
+# results match Windows. One "<module directory> <test name>" per line.
+dlls/wininet redirect
