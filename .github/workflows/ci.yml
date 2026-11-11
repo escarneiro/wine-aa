@@ -52,7 +52,7 @@ jobs:
             libfreetype-dev libfontconfig-dev libgnutls28-dev
 
       - name: Restore compiler cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: .ccache
           key: ccache-${{ github.run_id }}
@@ -94,18 +94,31 @@ jobs:
           make -j"$(nproc)" -s
           ccache -s
 
+      # Saved right after the build, even if the tests fail later.
+      - name: Save compiler cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .ccache
+          key: ccache-${{ github.run_id }}
+
       - name: Run tests
         working-directory: build
+        timeout-minutes: 90
         env:
           WINEDEBUG: -all
           # Passed through the environment, not ${{ }}, so that names
           # coming from a pull request can't inject shell code.
           MODULES: ${{ steps.modules.outputs.list }}
         run: |
+          # Create the prefix first, without offering to install Wine Mono
+          # and Gecko: that dialog would wait forever on a headless machine.
+          WINEDLLOVERRIDES="mscoree,mshtml=" timeout 600 xvfb-run -a ./wine wineboot -i
+          ./server/wineserver -w
           status=0
           for module in $MODULES; do
             echo "::group::$module"
-            xvfb-run -a make -k "$module/tests/test" || status=1
+            timeout 1800 xvfb-run -a make -k "$module/tests/test" || status=1
             echo "::endgroup::"
           done
           exit $status
