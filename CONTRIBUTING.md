@@ -82,6 +82,11 @@ Tests describe how Windows behaves. If you can't run the test on Windows,
 explain in the commit message why you believe the expected result is
 right, for example because a real application relies on it.
 
+If your fix is in a module wine-aa hasn't changed before, add the module
+to [.github/wine-aa-test-modules](.github/wine-aa-test-modules). CI always
+runs the tests of the modules listed there, so later upstream merges
+can't silently break your fix.
+
 ### Building and testing one module
 
 You don't need to build all of Wine to work on one DLL. An out-of-tree
@@ -103,12 +108,20 @@ changes.
 - Branch from `master` and open a pull request against `master`.
 - Describe the bug, how to reproduce it, and the affected application.
 - Mention AI assistance in the description too.
-- CI must pass before merging.
+- CI must pass before merging. It builds wine-aa and runs the tests of
+  every module your pull request changes, plus the modules in
+  `.github/wine-aa-test-modules`. The first build takes a while; later
+  ones are faster thanks to caching.
 
 ## Following upstream
 
-wine-aa regularly merges new upstream Wine releases into `master`. It never
-rewrites `master` history, so your forks and open pull requests stay valid.
+wine-aa merges new upstream Wine commits into `master` and never rewrites
+`master` history, so your forks and open pull requests stay valid.
+
+A daily job merges upstream Wine into the `upstream-sync` branch, builds
+and tests it, and opens a pull request. Maintainers merge it with "Create
+a merge commit". If the merge conflicts, the pull request explains how to
+resolve it by hand.
 If upstream fixes a bug independently, the wine-aa fix is dropped in favour
 of upstream's.
 

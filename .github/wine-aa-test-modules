@@ -1,0 +1,6 @@
+# Modules that contain wine-aa's own fixes, one directory per line.
+# CI always runs their test suites, on every pull request and every
+# upstream merge, so a merge that breaks one of our fixes is caught.
+# Add the module here when you add a fix to it.
+dlls/msxml3
+dlls/rsaenh

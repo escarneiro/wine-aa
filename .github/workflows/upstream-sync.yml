@@ -1,0 +1,109 @@
+name: Upstream sync
+
+# Merges new upstream Wine commits into the upstream-sync branch and
+# opens (or updates) a pull request into master:
+#
+# - If the merge is clean, the merged branch is built and tested here
+#   (pull requests opened by this workflow don't trigger CI themselves),
+#   and the pull request can be merged with "Create a merge commit".
+# - If it conflicts, upstream-sync is set to plain upstream Wine and the
+#   pull request shows the conflicts, to be resolved by hand.
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-sync
+
+jobs:
+  merge:
+    runs-on: ubuntu-24.04
+    outputs:
+      status: ${{ steps.merge.outputs.status }}
+
+    steps:
+      - name: Check out master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Merge upstream Wine
+        id: merge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/wine-mirror/wine.git
+          git fetch --tags upstream master
+
+          if git merge-base --is-ancestor upstream/master HEAD; then
+            echo "master already contains upstream Wine."
+            echo "status=uptodate" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          version=$(git describe --tags upstream/master)
+          git switch -c upstream-sync
+          if git merge --no-edit -m "Merge upstream Wine $version." upstream/master; then
+            status=merged
+          else
+            git merge --abort
+            git reset --hard upstream/master
+            status=conflict
+          fi
+          git push --force origin upstream-sync
+
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update pull request
+        if: steps.merge.outputs.status != 'uptodate'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS: ${{ steps.merge.outputs.status }}
+          VERSION: ${{ steps.merge.outputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$STATUS" = merged ]; then
+            body="Upstream Wine ($VERSION) merges cleanly into master.
+
+          Build and test results: $RUN_URL
+
+          When they pass, merge this with **Create a merge commit**. Don't squash or rebase it, that would lose upstream history."
+          else
+            body="Upstream Wine ($VERSION) conflicts with master, so this branch is plain upstream Wine.
+
+          Resolve it locally:
+
+          \`\`\`
+          git fetch origin
+          git switch master
+          git pull
+          git merge origin/upstream-sync
+          # fix the conflicts, build, run the tests
+          git push origin master
+          \`\`\`
+
+          This pull request closes by itself once master contains the merge."
+          fi
+
+          number=$(gh pr list --head upstream-sync --base master --state open --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --title "Merge upstream Wine $VERSION" --body "$body"
+          else
+            gh pr create --head upstream-sync --base master --title "Merge upstream Wine $VERSION" --body "$body"
+          fi
+
+  test:
+    needs: merge
+    if: needs.merge.outputs.status == 'merged'
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: upstream-sync

@@ -1,0 +1,111 @@
+name: CI
+
+# Builds wine-aa and runs the test suites that matter for a change:
+# the modules listed in .github/wine-aa-test-modules, plus, for pull
+# requests, every module the pull request changes.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Branch or commit to build and test
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 2G
+      CCACHE_COMPRESS: "1"
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          # Pull requests check out GitHub's merge commit; its first
+          # parent is the base branch, which is all we need to diff.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 1 }}
+          path: src
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-mingw-w64 flex bison ccache xvfb \
+            libx11-dev libxext-dev libxrender-dev libxrandr-dev libxi-dev \
+            libxcursor-dev libxcomposite-dev libxfixes-dev libxinerama-dev \
+            libfreetype-dev libfontconfig-dev libgnutls28-dev
+
+      - name: Restore compiler cache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-${{ github.run_id }}
+          restore-keys: ccache-
+
+      - name: Choose test modules
+        id: modules
+        working-directory: src
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            base=HEAD^1
+          else
+            base=
+          fi
+          modules=$(.github/scripts/test-modules.sh $base | tr '\n' ' ')
+          echo "Testing: $modules"
+          echo "list=$modules" >> "$GITHUB_OUTPUT"
+
+      - name: Configure
+        run: |
+          mkdir build
+          cd build
+          ../src/configure --enable-archs=i386,x86_64 \
+            CC="ccache gcc" \
+            i386_CC="ccache i686-w64-mingw32-gcc" \
+            x86_64_CC="ccache x86_64-w64-mingw32-gcc" \
+            --without-alsa --without-capi --without-cups --without-dbus \
+            --without-ffmpeg --without-gphoto --without-gstreamer \
+            --without-krb5 --without-netapi --without-opengl --without-oss \
+            --without-pcap --without-pulse --without-sane --without-sdl \
+            --without-udev --without-usb --without-v4l2 --without-vulkan \
+            --without-wayland
+
+      - name: Build
+        working-directory: build
+        run: |
+          make -j"$(nproc)" -s
+          ccache -s
+
+      - name: Run tests
+        working-directory: build
+        env:
+          WINEDEBUG: -all
+          # Passed through the environment, not ${{ }}, so that names
+          # coming from a pull request can't inject shell code.
+          MODULES: ${{ steps.modules.outputs.list }}
+        run: |
+          status=0
+          for module in $MODULES; do
+            echo "::group::$module"
+            xvfb-run -a make -k "$module/tests/test" || status=1
+            echo "::endgroup::"
+          done
+          exit $status
