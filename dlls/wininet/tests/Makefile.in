@@ -6,5 +6,6 @@ SOURCES = \
 	generated.c \
 	http.c \
 	internet.c \
+	redirect.c \
 	url.c \
 	urlcache.c
