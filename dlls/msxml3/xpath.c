@@ -2085,6 +2085,9 @@ static void xpath_compile_expr(struct xpath_parser_context *ctxt, bool sort)
         xpath_parse_skipspaces(ctxt);
     }
 
+    if (ctxt->error != XPATH_EXPRESSION_OK)
+        sort = false;
+
     if (sort && (ctxt->comp->steps.values[ctxt->comp->last].op != XPATH_OP_VALUE))
     {
         /* more ops could be optimized too */
@@ -7608,6 +7611,9 @@ static void xslpattern_compile_expr(struct xpath_parser_context *ctxt, bool sort
         xpath_push_binary_step(ctxt, XPATH_OP_OR, op1, ctxt->comp->last, 0, 0);
         xpath_parse_skipspaces(ctxt);
     }
+
+    if (ctxt->error != XPATH_EXPRESSION_OK)
+        sort = false;
 
     if (sort && (ctxt->comp->steps.values[ctxt->comp->last].op != XPATH_OP_VALUE))
     {

@@ -7738,6 +7738,9 @@ static const struct query_test xslpattern_test[] =
     { "root//elem[not (d)]", "E3.E2.D1" },
     { "not(", NULL },
     { "root//elem[not(]", NULL },
+
+    /* Missing operand after a modifier */
+    { "$any$ $not$", NULL },
     { NULL }
 };
 
