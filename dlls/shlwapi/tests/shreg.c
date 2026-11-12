@@ -41,6 +41,7 @@ static LSTATUS (WINAPI *pSHRegCreateUSKeyW)(LPCWSTR,REGSAM,HUSKEY,PHUSKEY,DWORD)
 static LSTATUS (WINAPI *pSHRegOpenUSKeyW)(LPCWSTR,REGSAM,HUSKEY,PHUSKEY,BOOL);
 static LSTATUS (WINAPI *pSHRegCloseUSKey)(HUSKEY);
 static LSTATUS (WINAPI *pSHRegGetUSValueW)(LPCWSTR,LPCWSTR,DWORD*,void*,DWORD*,BOOL,void*,DWORD);
+static LSTATUS (WINAPI *pSHRegWriteUSValueW)(HUSKEY,LPCWSTR,DWORD,void*,DWORD,DWORD);
 
 
 static const char sTestpath1[] = "%LONGSYSTEMVAR%\\subdir1";
@@ -456,6 +457,106 @@ static void test_SHRegCreateUSKeyW(void)
     ok(ret == ERROR_INVALID_PARAMETER, "got %ld\n", ret);
 }
 
+#define USKEY_PATH L"Software\\Wine\\Test\\uskey"
+
+static void check_uskey_value_(unsigned int line, HKEY root, const WCHAR *expected)
+{
+    WCHAR buffer[16];
+    DWORD size = sizeof(buffer);
+    LONG ret;
+
+    ret = RegGetValueW(root, USKEY_PATH, L"value", RRF_RT_REG_SZ, NULL, buffer, &size);
+    if (!expected)
+        ok_(__FILE__, line)(ret == ERROR_FILE_NOT_FOUND, "Got %ld, value %s.\n", ret, wine_dbgstr_w(buffer));
+    else
+        ok_(__FILE__, line)(!ret && !wcscmp(buffer, expected), "Got %ld, value %s, expected %s.\n",
+                ret, wine_dbgstr_w(buffer), wine_dbgstr_w(expected));
+}
+#define check_uskey_value(a, b) check_uskey_value_(__LINE__, a, b)
+
+static BOOL uskey_exists(HKEY root)
+{
+    HKEY key;
+
+    if (RegOpenKeyExW(root, USKEY_PATH, 0, KEY_READ, &key))
+        return FALSE;
+    RegCloseKey(key);
+    return TRUE;
+}
+
+static void test_SHRegCreateUSKeyW_flags(void)
+{
+    HUSKEY key;
+    LONG ret;
+    HKEY hkey;
+
+    if (!pSHRegCreateUSKeyW || !pSHRegWriteUSValueW || !pSHRegCloseUSKey)
+    {
+        win_skip("SHRegCreateUSKeyW or SHRegWriteUSValueW not available\n");
+        return;
+    }
+
+    RegDeleteKeyW(HKEY_CURRENT_USER, USKEY_PATH);
+
+    key = (HUSKEY)0xdeadbeef;
+    ret = pSHRegCreateUSKeyW(USKEY_PATH, KEY_ALL_ACCESS, NULL, &key, 0);
+    ok(ret == ERROR_INVALID_PARAMETER, "Got %ld.\n", ret);
+    ok(!key, "Got key %p.\n", key);
+    ok(!uskey_exists(HKEY_CURRENT_USER), "Key was created.\n");
+
+    /* SHREGSET_HKCU creates the key too. */
+    key = NULL;
+    ret = pSHRegCreateUSKeyW(USKEY_PATH, KEY_ALL_ACCESS, NULL, &key, SHREGSET_HKCU);
+    ok(!ret, "Got %ld.\n", ret);
+    ok(!!key, "Got NULL key.\n");
+    ok(uskey_exists(HKEY_CURRENT_USER), "Key was not created.\n");
+
+    /* No flags: nothing is written. */
+    ret = pSHRegWriteUSValueW(key, L"value", REG_SZ, (void *)L"one", sizeof(L"one"), 0);
+    ok(!ret, "Got %ld.\n", ret);
+    check_uskey_value(HKEY_CURRENT_USER, NULL);
+
+    /* SHREGSET_HKCU only writes a value that doesn't exist yet. */
+    ret = pSHRegWriteUSValueW(key, L"value", REG_SZ, (void *)L"one", sizeof(L"one"), SHREGSET_HKCU);
+    ok(!ret, "Got %ld.\n", ret);
+    check_uskey_value(HKEY_CURRENT_USER, L"one");
+    ret = pSHRegWriteUSValueW(key, L"value", REG_SZ, (void *)L"two", sizeof(L"two"), SHREGSET_HKCU);
+    ok(!ret, "Got %ld.\n", ret);
+    check_uskey_value(HKEY_CURRENT_USER, L"one");
+
+    /* SHREGSET_FORCE_HKCU always writes it. */
+    ret = pSHRegWriteUSValueW(key, L"value", REG_SZ, (void *)L"two", sizeof(L"two"), SHREGSET_FORCE_HKCU);
+    ok(!ret, "Got %ld.\n", ret);
+    check_uskey_value(HKEY_CURRENT_USER, L"two");
+
+    pSHRegCloseUSKey(key);
+    RegDeleteKeyW(HKEY_CURRENT_USER, USKEY_PATH);
+
+    /* SHREGSET_HKLM creates the key in HKEY_LOCAL_MACHINE only. */
+    if (RegCreateKeyExW(HKEY_LOCAL_MACHINE, USKEY_PATH, 0, NULL, 0, KEY_ALL_ACCESS, NULL, &hkey, NULL))
+    {
+        skip("Can't write to HKEY_LOCAL_MACHINE.\n");
+        return;
+    }
+    RegCloseKey(hkey);
+    RegDeleteKeyW(HKEY_LOCAL_MACHINE, USKEY_PATH);
+
+    key = NULL;
+    ret = pSHRegCreateUSKeyW(USKEY_PATH, KEY_ALL_ACCESS, NULL, &key, SHREGSET_HKLM);
+    ok(!ret, "Got %ld.\n", ret);
+    ok(!!key, "Got NULL key.\n");
+    ok(!uskey_exists(HKEY_CURRENT_USER), "HKCU key was created.\n");
+    ok(uskey_exists(HKEY_LOCAL_MACHINE), "HKLM key was not created.\n");
+
+    ret = pSHRegWriteUSValueW(key, L"value", REG_SZ, (void *)L"one", sizeof(L"one"), SHREGSET_HKLM);
+    ok(!ret, "Got %ld.\n", ret);
+    check_uskey_value(HKEY_LOCAL_MACHINE, L"one");
+    check_uskey_value(HKEY_CURRENT_USER, NULL);
+
+    pSHRegCloseUSKey(key);
+    RegDeleteKeyW(HKEY_LOCAL_MACHINE, USKEY_PATH);
+}
+
 static void test_SHRegCloseUSKey(void)
 {
     static const WCHAR localW[] = {'S','o','f','t','w','a','r','e',0};
@@ -536,6 +637,7 @@ START_TEST(shreg)
     pSHRegOpenUSKeyW = (void*)GetProcAddress(hshlwapi, "SHRegOpenUSKeyW");
     pSHRegCloseUSKey = (void*)GetProcAddress(hshlwapi, "SHRegCloseUSKey");
     pSHRegGetUSValueW = (void*)GetProcAddress(hshlwapi, "SHRegGetUSValueW");
+    pSHRegWriteUSValueW = (void*)GetProcAddress(hshlwapi, "SHRegWriteUSValueW");
 
     test_SHGetValue();
     test_SHRegGetValue();
@@ -545,6 +647,7 @@ START_TEST(shreg)
     test_SHCopyKey();
     test_SHDeleteKey();
     test_SHRegCreateUSKeyW();
+    test_SHRegCreateUSKeyW_flags();
     test_SHRegCloseUSKey();
 
     delete_key( hkey, "Software\\Wine", "Test" );

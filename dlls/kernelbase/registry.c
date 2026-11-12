@@ -3548,7 +3548,9 @@ static HKEY reg_get_hkey_from_huskey(HUSKEY hUSKey, BOOL is_hkcu)
 
 LONG WINAPI SHRegCreateUSKeyW(const WCHAR *path, REGSAM samDesired, HUSKEY relative_key, PHUSKEY new_uskey, DWORD flags)
 {
-    LONG ret = ERROR_CALL_NOT_IMPLEMENTED;
+    static const DWORD hkcu_flags = SHREGSET_HKCU | SHREGSET_FORCE_HKCU;
+    static const DWORD hklm_flags = SHREGSET_HKLM | SHREGSET_FORCE_HKLM;
+    LONG ret = ERROR_SUCCESS;
     struct USKEY *ret_key;
 
     TRACE("%s, %#lx, %p, %p, %#lx\n", debugstr_w(path), samDesired, relative_key, new_uskey, flags);
@@ -3558,13 +3560,13 @@ LONG WINAPI SHRegCreateUSKeyW(const WCHAR *path, REGSAM samDesired, HUSKEY relat
 
     *new_uskey = NULL;
 
-    if (flags & ~SHREGSET_FORCE_HKCU)
-    {
+    if (!(flags & (hkcu_flags | hklm_flags)))
+        return ERROR_INVALID_PARAMETER;
+    if (flags & ~(hkcu_flags | hklm_flags))
         FIXME("unsupported flags 0x%08lx\n", flags);
-        return ERROR_SUCCESS;
-    }
 
-    ret_key = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*ret_key));
+    if (!(ret_key = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(*ret_key))))
+        return ERROR_NOT_ENOUGH_MEMORY;
     lstrcpynW(ret_key->path, path, ARRAY_SIZE(ret_key->path));
 
     if (relative_key)
@@ -3578,14 +3580,17 @@ LONG WINAPI SHRegCreateUSKeyW(const WCHAR *path, REGSAM samDesired, HUSKEY relat
         ret_key->HKLMstart = HKEY_LOCAL_MACHINE;
     }
 
-    if (flags & SHREGSET_FORCE_HKCU)
-    {
+    /* Both the "if empty" and the "force" flags create the key; they only
+     * differ for values, see SHRegWriteUSValueW(). */
+    if (flags & hkcu_flags)
         ret = RegCreateKeyExW(ret_key->HKCUstart, path, 0, NULL, 0, samDesired, NULL, &ret_key->HKCUkey, NULL);
-        if (ret == ERROR_SUCCESS)
-            *new_uskey = ret_key;
-        else
-            HeapFree(GetProcessHeap(), 0, ret_key);
-    }
+    if (!ret && (flags & hklm_flags))
+        ret = RegCreateKeyExW(ret_key->HKLMstart, path, 0, NULL, 0, samDesired, NULL, &ret_key->HKLMkey, NULL);
+
+    if (ret == ERROR_SUCCESS)
+        *new_uskey = ret_key;
+    else
+        SHRegCloseUSKey(ret_key);
 
     return ret;
 }
@@ -3795,7 +3800,6 @@ LONG WINAPI SHRegWriteUSValueW(HUSKEY hUSKey, const WCHAR *value, DWORD type, vo
         return ERROR_INVALID_PARAMETER;
     }
     __ENDTRY
-    if (!(flags & (SHREGSET_FORCE_HKCU|SHREGSET_FORCE_HKLM))) return ERROR_INVALID_PARAMETER;
 
     if (flags & (SHREGSET_FORCE_HKCU | SHREGSET_HKCU))
     {
