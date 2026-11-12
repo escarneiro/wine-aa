@@ -27,6 +27,7 @@ SOURCES = \
 	enumobjects.c \
 	folders.c \
 	iconcache.c \
+	menuband.c \
 	new_menu.c \
 	pidl.c \
 	recyclebin.c \

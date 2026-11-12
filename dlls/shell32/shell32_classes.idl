@@ -186,6 +186,12 @@ coclass KnownFolderManager { interface IKnownFolderManager; }
 
 [
     threading(apartment),
+    uuid(5b4dae26-b807-11d0-9815-00c04fd91972)
+]
+coclass MenuBand { interface IShellMenu; }
+
+[
+    threading(apartment),
     uuid(d969a300-e7ff-11d0-a93b-00a0c90f2719)
 ]
 coclass NewMenu {}

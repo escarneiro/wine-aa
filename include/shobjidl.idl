@@ -1578,6 +1578,222 @@ interface IDockingWindow : IOleWindow
         [in] BOOL fReserved);
 }
 
+cpp_quote("#define SMDM_SHELLFOLDER 0x00000001")
+cpp_quote("#define SMDM_HMENU       0x00000002")
+cpp_quote("#define SMDM_TOOLBAR     0x00000004")
+
+typedef struct tagSMDATA
+{
+    DWORD dwMask;
+    DWORD dwFlags;
+    HMENU hmenu;
+    HWND hwnd;
+    UINT uId;
+    UINT uIdParent;
+    UINT uIdAncestor;
+    IUnknown *punk;
+    LPITEMIDLIST pidlFolder;
+    LPITEMIDLIST pidlItem;
+    IShellFolder *psf;
+    void *pvUserData;
+} SMDATA, *LPSMDATA;
+
+typedef struct tagSMINFO
+{
+    DWORD dwMask;
+    DWORD dwType;
+    DWORD dwFlags;
+    int iIcon;
+} SMINFO, *PSMINFO;
+
+/*****************************************************************************
+ * IShellMenuCallback interface
+ */
+[
+    object,
+    uuid(4ca300a1-9b8d-11d1-8b22-00c04fd918d0),
+    pointer_default(unique),
+    local
+]
+interface IShellMenuCallback : IUnknown
+{
+    HRESULT CallbackSM(
+        [in, out] LPSMDATA psmd,
+        [in] UINT uMsg,
+        [in] WPARAM wParam,
+        [in] LPARAM lParam);
+}
+
+/*****************************************************************************
+ * IShellMenu interface
+ */
+[
+    object,
+    uuid(ee1f7637-e138-11d1-8379-00c04fd918d0),
+    pointer_default(unique),
+    local
+]
+interface IShellMenu : IUnknown
+{
+cpp_quote("#define SMINIT_DEFAULT          0x00000000")
+cpp_quote("#define SMINIT_RESTRICT_DRAGDROP 0x00000002")
+cpp_quote("#define SMINIT_TOPLEVEL         0x00000004")
+cpp_quote("#define SMINIT_CACHED           0x00000010")
+cpp_quote("#define SMINIT_AUTOEXPAND       0x00000100")
+cpp_quote("#define SMINIT_AUTOTOOLTIP      0x00000200")
+cpp_quote("#define SMINIT_DROPONCONTAINER  0x00000400")
+cpp_quote("#define SMINIT_VERTICAL         0x10000000")
+cpp_quote("#define SMINIT_HORIZONTAL       0x20000000")
+cpp_quote("#define SMSET_TOP               0x10000000")
+cpp_quote("#define SMSET_BOTTOM            0x20000000")
+cpp_quote("#define SMSET_DONTOWN           0x00000001")
+
+    HRESULT Initialize(
+        [in] IShellMenuCallback *psmc,
+        [in] UINT uId,
+        [in] UINT uIdAncestor,
+        [in] DWORD dwFlags);
+
+    HRESULT GetMenuInfo(
+        [out] IShellMenuCallback **ppsmc,
+        [out] UINT *puId,
+        [out] UINT *puIdAncestor,
+        [out] DWORD *pdwFlags);
+
+    HRESULT SetShellFolder(
+        [in] IShellFolder *psf,
+        [in] LPCITEMIDLIST pidlFolder,
+        [in] HKEY hKey,
+        [in] DWORD dwFlags);
+
+    HRESULT GetShellFolder(
+        [out] DWORD *pdwFlags,
+        [out] LPITEMIDLIST *ppidl,
+        [in] REFIID riid,
+        [out, iid_is(riid)] void **ppv);
+
+    HRESULT SetMenu(
+        [in] HMENU hmenu,
+        [in] HWND hwnd,
+        [in] DWORD dwFlags);
+
+    HRESULT GetMenu(
+        [out] HMENU *phmenu,
+        [out] HWND *phwnd,
+        [out] DWORD *pdwFlags);
+
+    HRESULT InvalidateItem(
+        [in] LPSMDATA psmd,
+        [in] DWORD dwFlags);
+
+    HRESULT GetState(
+        [out] LPSMDATA psmd);
+
+    HRESULT SetMenuToolbar(
+        [in] IUnknown *punk,
+        [in] DWORD dwFlags);
+}
+
+/*****************************************************************************
+ * IMenuBand interface
+ */
+[
+    object,
+    uuid(568804cd-cbd7-11d0-9816-00c04fd91972),
+    pointer_default(unique),
+    local
+]
+interface IMenuBand : IUnknown
+{
+cpp_quote("#define MBHANDCID_PIDLSELECT 0")
+
+    HRESULT IsMenuMessage(
+        [in] MSG *pmsg);
+
+    HRESULT TranslateMenuMessage(
+        [in, out] MSG *pmsg,
+        [out] LRESULT *plRet);
+}
+
+cpp_quote("#define DBIM_MINSIZE   0x0001")
+cpp_quote("#define DBIM_MAXSIZE   0x0002")
+cpp_quote("#define DBIM_INTEGRAL  0x0004")
+cpp_quote("#define DBIM_ACTUAL    0x0008")
+cpp_quote("#define DBIM_TITLE     0x0010")
+cpp_quote("#define DBIM_MODEFLAGS 0x0020")
+cpp_quote("#define DBIM_BKCOLOR   0x0040")
+
+cpp_quote("#define DBIMF_NORMAL          0x0000")
+cpp_quote("#define DBIMF_FIXED           0x0001")
+cpp_quote("#define DBIMF_FIXEDBMP        0x0004")
+cpp_quote("#define DBIMF_VARIABLEHEIGHT  0x0008")
+cpp_quote("#define DBIMF_UNDELETEABLE    0x0010")
+cpp_quote("#define DBIMF_DEBOSSED        0x0020")
+cpp_quote("#define DBIMF_BKCOLOR         0x0040")
+cpp_quote("#define DBIMF_USECHEVRON      0x0080")
+cpp_quote("#define DBIMF_BREAK           0x0100")
+cpp_quote("#define DBIMF_ADDTOFRONT      0x0200")
+cpp_quote("#define DBIMF_TOPALIGN        0x0400")
+cpp_quote("#define DBIMF_NOGRIPPER       0x0800")
+cpp_quote("#define DBIMF_ALWAYSGRIPPER   0x1000")
+cpp_quote("#define DBIMF_NOMARGINS       0x2000")
+
+cpp_quote("#define DBIF_VIEWMODE_NORMAL      0x0000")
+cpp_quote("#define DBIF_VIEWMODE_VERTICAL    0x0001")
+cpp_quote("#define DBIF_VIEWMODE_FLOATING    0x0002")
+cpp_quote("#define DBIF_VIEWMODE_TRANSPARENT 0x0004")
+
+typedef struct
+{
+    DWORD dwMask;
+    POINTL ptMinSize;
+    POINTL ptMaxSize;
+    POINTL ptIntegral;
+    POINTL ptActual;
+    WCHAR wszTitle[256];
+    DWORD dwModeFlags;
+    COLORREF crBkgnd;
+} DESKBANDINFO;
+
+/*****************************************************************************
+ * IDeskBand interface
+ */
+[
+    object,
+    uuid(eb0fe172-1a3a-11d0-89b3-00a0c90a90ac),
+    pointer_default(unique),
+    local
+]
+interface IDeskBand : IDockingWindow
+{
+    HRESULT GetBandInfo(
+        [in] DWORD dwBandID,
+        [in] DWORD dwViewMode,
+        [in, out] DESKBANDINFO *pdbi);
+}
+
+/*****************************************************************************
+ * IWinEventHandler interface
+ */
+[
+    object,
+    uuid(ea5f2d61-e008-11cf-99cb-00c04fd64497),
+    pointer_default(unique),
+    local
+]
+interface IWinEventHandler : IUnknown
+{
+    HRESULT OnWinEvent(
+        [in] HWND hwnd,
+        [in] UINT uMsg,
+        [in] WPARAM wParam,
+        [in] LPARAM lParam,
+        [out] LRESULT *plres);
+
+    HRESULT IsWindowOwner(
+        [in] HWND hwnd);
+}
+
 
 /*****************************************************************************
  * IDockingWindowFrame interface
