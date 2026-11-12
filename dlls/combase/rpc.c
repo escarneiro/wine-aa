@@ -1876,6 +1876,7 @@ void rpc_execute_call(struct dispatch_params *params)
     ORPC_EXTENT_ARRAY orpc_ext_array;
     WIRE_ORPC_EXTENT *first_wire_orpc_extent;
     GUID old_causality_id;
+    BOOL old_call_local;
     struct tlsdata *tlsdata;
     struct apartment *apt;
 
@@ -1969,10 +1970,13 @@ void rpc_execute_call(struct dispatch_params *params)
      * messages received during the SendReceive will appear to originate from
      * this call - this should be checked with what Windows does */
     old_causality_id = tlsdata->causality_id;
+    old_call_local = tlsdata->server_call_local;
     tlsdata->causality_id = orpcthis.cid;
+    tlsdata->server_call_local = params->bypass_rpcrt;
     tlsdata->pending_call_count_server++;
     params->hr = IRpcStubBuffer_Invoke(params->stub, params->msg, params->chan);
     tlsdata->pending_call_count_server--;
+    tlsdata->server_call_local = old_call_local;
     tlsdata->causality_id = old_causality_id;
 
     /* the invoke allocated a new buffer, so free the old one */

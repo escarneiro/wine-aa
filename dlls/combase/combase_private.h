@@ -93,6 +93,7 @@ struct tlsdata
     DWORD             spies_lock;
     DWORD             cancelcount;
     CO_MTA_USAGE_COOKIE implicit_mta_cookie; /* mta referenced by roapi from sta thread */
+    BOOL              server_call_local; /* the current server call comes from this process */
 };
 
 extern HRESULT WINAPI InternalTlsAllocData(struct tlsdata **data);

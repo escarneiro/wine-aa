@@ -3494,8 +3494,28 @@ HRESULT WINAPI CoEnableCallCancellation(void *reserved)
  */
 HRESULT WINAPI CoGetCallerTID(DWORD *tid)
 {
-    FIXME("stub!\n");
-    return E_NOTIMPL;
+    struct tlsdata *tlsdata;
+    HRESULT hr;
+
+    TRACE("%p.\n", tid);
+
+    if (!tid)
+        return E_INVALIDARG;
+    if (FAILED(hr = com_get_tlsdata(&tlsdata)))
+        return hr;
+
+    /* Outside of an incoming call, the caller is the current thread. */
+    if (!tlsdata->pending_call_count_server || tlsdata->server_call_local)
+    {
+        if (tlsdata->pending_call_count_server)
+            FIXME("Returning the current thread instead of the caller's.\n");
+        *tid = GetCurrentThreadId();
+        return S_FALSE;
+    }
+
+    FIXME("The caller's thread id is not known.\n");
+    *tid = 0;
+    return S_OK;
 }
 
 /***********************************************************************
