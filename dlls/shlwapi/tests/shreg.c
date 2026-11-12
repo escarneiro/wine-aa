@@ -41,6 +41,7 @@ static LSTATUS (WINAPI *pSHRegCreateUSKeyW)(LPCWSTR,REGSAM,HUSKEY,PHUSKEY,DWORD)
 static LSTATUS (WINAPI *pSHRegOpenUSKeyW)(LPCWSTR,REGSAM,HUSKEY,PHUSKEY,BOOL);
 static LSTATUS (WINAPI *pSHRegCloseUSKey)(HUSKEY);
 static LSTATUS (WINAPI *pSHRegGetUSValueW)(LPCWSTR,LPCWSTR,DWORD*,void*,DWORD*,BOOL,void*,DWORD);
+static LSTATUS (WINAPI *pSHRegWriteUSValueW)(HUSKEY,LPCWSTR,DWORD,void*,DWORD,DWORD);
 
 
 static const char sTestpath1[] = "%LONGSYSTEMVAR%\\subdir1";
@@ -456,6 +457,75 @@ static void test_SHRegCreateUSKeyW(void)
     ok(ret == ERROR_INVALID_PARAMETER, "got %ld\n", ret);
 }
 
+static void read_test_value(HKEY root, WCHAR *buf, DWORD size)
+{
+    if (RegGetValueW(root, L"Software\\Wine\\Test\\uskey", L"value", RRF_RT_REG_SZ, NULL, buf, &size))
+        lstrcpyW(buf, L"(none)");
+}
+
+/* Temporary experiment: record how SHREGSET flags behave. */
+static void test_SHRegCreateUSKeyW_flags(void)
+{
+    static const DWORD create_flags[] =
+    {
+        0, SHREGSET_HKCU, SHREGSET_FORCE_HKCU, SHREGSET_HKLM, SHREGSET_DEFAULT,
+    };
+    static const DWORD write_flags[] =
+    {
+        0, SHREGSET_HKCU, SHREGSET_FORCE_HKCU, SHREGSET_HKLM, SHREGSET_DEFAULT,
+    };
+    unsigned int i, j;
+
+    if (!pSHRegCreateUSKeyW || !pSHRegWriteUSValueW || !pSHRegCloseUSKey)
+    {
+        win_skip("SHRegCreateUSKeyW or SHRegWriteUSValueW not available\n");
+        return;
+    }
+
+    for (i = 0; i < ARRAY_SIZE(create_flags); ++i)
+    {
+        for (j = 0; j < ARRAY_SIZE(write_flags); ++j)
+        {
+            WCHAR hkcu1[16], hkcu2[16], hklm1[16], hklm2[16];
+            HUSKEY key = (HUSKEY)0xdeadbeef;
+            LONG ret, ret1 = -1, ret2 = -1;
+            BOOL hkcu_key, hklm_key;
+            HKEY hkey;
+
+            RegDeleteKeyW(HKEY_CURRENT_USER, L"Software\\Wine\\Test\\uskey");
+            RegDeleteKeyW(HKEY_LOCAL_MACHINE, L"Software\\Wine\\Test\\uskey");
+
+            ret = pSHRegCreateUSKeyW(L"Software\\Wine\\Test\\uskey", KEY_ALL_ACCESS, NULL, &key, create_flags[i]);
+
+            hkcu_key = !RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Wine\\Test\\uskey", 0, KEY_READ, &hkey);
+            if (hkcu_key) RegCloseKey(hkey);
+            hklm_key = !RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"Software\\Wine\\Test\\uskey", 0, KEY_READ, &hkey);
+            if (hklm_key) RegCloseKey(hkey);
+
+            lstrcpyW(hkcu1, L"-"); lstrcpyW(hkcu2, L"-"); lstrcpyW(hklm1, L"-"); lstrcpyW(hklm2, L"-");
+            if (!ret && key && key != (HUSKEY)0xdeadbeef)
+            {
+                ret1 = pSHRegWriteUSValueW(key, L"value", REG_SZ, (void *)L"one", sizeof(L"one"), write_flags[j]);
+                read_test_value(HKEY_CURRENT_USER, hkcu1, sizeof(hkcu1));
+                read_test_value(HKEY_LOCAL_MACHINE, hklm1, sizeof(hklm1));
+                ret2 = pSHRegWriteUSValueW(key, L"value", REG_SZ, (void *)L"two", sizeof(L"two"), write_flags[j]);
+                read_test_value(HKEY_CURRENT_USER, hkcu2, sizeof(hkcu2));
+                read_test_value(HKEY_LOCAL_MACHINE, hklm2, sizeof(hklm2));
+                pSHRegCloseUSKey(key);
+            }
+
+            trace("RESULT create %#lx: ret %ld key %s hkcu key %d hklm key %d | write %#lx: ret %ld/%ld "
+                  "hkcu %s/%s hklm %s/%s\n", create_flags[i], ret,
+                  key == (HUSKEY)0xdeadbeef ? "untouched" : key ? "set" : "NULL", hkcu_key, hklm_key,
+                  write_flags[j], ret1, ret2, wine_dbgstr_w(hkcu1), wine_dbgstr_w(hkcu2),
+                  wine_dbgstr_w(hklm1), wine_dbgstr_w(hklm2));
+        }
+    }
+
+    RegDeleteKeyW(HKEY_CURRENT_USER, L"Software\\Wine\\Test\\uskey");
+    RegDeleteKeyW(HKEY_LOCAL_MACHINE, L"Software\\Wine\\Test\\uskey");
+}
+
 static void test_SHRegCloseUSKey(void)
 {
     static const WCHAR localW[] = {'S','o','f','t','w','a','r','e',0};
@@ -536,6 +606,7 @@ START_TEST(shreg)
     pSHRegOpenUSKeyW = (void*)GetProcAddress(hshlwapi, "SHRegOpenUSKeyW");
     pSHRegCloseUSKey = (void*)GetProcAddress(hshlwapi, "SHRegCloseUSKey");
     pSHRegGetUSValueW = (void*)GetProcAddress(hshlwapi, "SHRegGetUSValueW");
+    pSHRegWriteUSValueW = (void*)GetProcAddress(hshlwapi, "SHRegWriteUSValueW");
 
     test_SHGetValue();
     test_SHRegGetValue();
@@ -545,6 +616,7 @@ START_TEST(shreg)
     test_SHCopyKey();
     test_SHDeleteKey();
     test_SHRegCreateUSKeyW();
+    test_SHRegCreateUSKeyW_flags();
     test_SHRegCloseUSKey();
 
     delete_key( hkey, "Software\\Wine", "Test" );
