@@ -727,6 +727,14 @@ static HRESULT WINAPI memstream_SetSize(IStream *iface, ULARGE_INTEGER new_size)
 
     /* we cut off the high part here */
     length = new_size.u.LowPart;
+    if (!length)
+    {
+        /* _recalloc() returns NULL for a zero size */
+        free(stream->u.mem.buffer);
+        stream->u.mem.buffer = NULL;
+        stream->u.mem.length = 0;
+        return S_OK;
+    }
     buffer = _recalloc(stream->u.mem.buffer, 1, length);
     if (!buffer)
         return STG_E_INSUFFICIENTMEMORY;
