@@ -7,7 +7,7 @@
 @ stub JetAttachDatabase2
 @ stub JetAttachDatabase2A
 @ stub JetAttachDatabase2W
-@ stub JetAttachDatabase
+@ stdcall JetAttachDatabase(ptr str long)
 @ stub JetAttachDatabaseA
 @ stub JetAttachDatabaseW
 @ stub JetAttachDatabaseWithStreaming
@@ -15,7 +15,7 @@
 @ stub JetAttachDatabaseWithStreamingW
 @ stub JetBackup
 @ stub JetBackupA
-@ stub JetBackupInstance
+@ stdcall JetBackupInstance(ptr str long ptr)
 @ stub JetBackupInstanceA
 @ stub JetBackupInstanceW
 @ stub JetBackupW
@@ -24,17 +24,17 @@
 @ stub JetBeginDatabaseIncrementalReseedW
 @ stub JetBeginExternalBackup
 @ stub JetBeginExternalBackupInstance
-@ stub JetBeginSession
+@ stdcall JetBeginSession(ptr ptr str str)
 @ stub JetBeginSessionA
 @ stub JetBeginSessionW
 @ stub JetBeginSurrogateBackup
-@ stub JetBeginTransaction2
-@ stub JetBeginTransaction
-@ stub JetCloseDatabase
+@ stdcall JetBeginTransaction2(ptr long)
+@ stdcall JetBeginTransaction(ptr)
+@ stdcall JetCloseDatabase(ptr long long)
 @ stub JetCloseFile
 @ stub JetCloseFileInstance
-@ stub JetCloseTable
-@ stub JetCommitTransaction
+@ stdcall JetCloseTable(ptr ptr)
+@ stdcall JetCommitTransaction(ptr long)
 @ stub JetCompact
 @ stub JetCompactA
 @ stub JetCompactW
@@ -46,13 +46,13 @@
 @ stub JetCreateDatabase2
 @ stub JetCreateDatabase2A
 @ stub JetCreateDatabase2W
-@ stub JetCreateDatabase
+@ stdcall JetCreateDatabase(ptr str str ptr long)
 @ stub JetCreateDatabaseA
 @ stub JetCreateDatabaseW
 @ stub JetCreateDatabaseWithStreaming
 @ stub JetCreateDatabaseWithStreamingA
 @ stub JetCreateDatabaseWithStreamingW
-@ stub JetCreateIndex2
+@ stdcall JetCreateIndex2(ptr ptr ptr long)
 @ stub JetCreateIndex2A
 @ stub JetCreateIndex2W
 @ stub JetCreateIndex3A
@@ -63,12 +63,12 @@
 @ stub JetCreateInstance2
 @ stub JetCreateInstance2A
 @ stub JetCreateInstance2W
-@ stub JetCreateInstance
+@ stdcall JetCreateInstance(ptr str)
 @ stub JetCreateInstanceA
 @ stub JetCreateInstanceW
 @ stub JetCreateTable
 @ stub JetCreateTableA
-@ stub JetCreateTableColumnIndex2
+@ stdcall JetCreateTableColumnIndex2(ptr long ptr)
 @ stub JetCreateTableColumnIndex2A
 @ stub JetCreateTableColumnIndex2W
 @ stub JetCreateTableColumnIndex3A
@@ -81,16 +81,16 @@
 @ stub JetDBUtilitiesA
 @ stub JetDBUtilitiesW
 @ stub JetDatabaseScan
-@ stub JetDefragment2
+@ stdcall JetDefragment2(ptr long str ptr ptr ptr long)
 @ stub JetDefragment2A
 @ stub JetDefragment2W
 @ stub JetDefragment3
 @ stub JetDefragment3A
 @ stub JetDefragment3W
-@ stub JetDefragment
+@ stdcall JetDefragment(ptr long str ptr ptr long)
 @ stub JetDefragmentA
 @ stub JetDefragmentW
-@ stub JetDelete
+@ stdcall JetDelete(ptr ptr)
 @ stub JetDeleteColumn2
 @ stub JetDeleteColumn2A
 @ stub JetDeleteColumn2W
@@ -106,7 +106,7 @@
 @ stub JetDetachDatabase2
 @ stub JetDetachDatabase2A
 @ stub JetDetachDatabase2W
-@ stub JetDetachDatabase
+@ stdcall JetDetachDatabase(ptr str)
 @ stub JetDetachDatabaseA
 @ stub JetDetachDatabaseW
 @ stub JetDupCursor
@@ -121,9 +121,9 @@
 @ stub JetEndExternalBackup
 @ stub JetEndExternalBackupInstance2
 @ stub JetEndExternalBackupInstance
-@ stub JetEndSession
+@ stdcall JetEndSession(ptr long)
 @ stub JetEndSurrogateBackup
-@ stub JetEnumerateColumns
+@ stdcall JetEnumerateColumns(ptr ptr long ptr ptr ptr ptr ptr long long)
 @ stub JetEscrowUpdate
 @ stub JetExternalRestore2
 @ stub JetExternalRestore2A
@@ -139,7 +139,7 @@
 @ stub JetGetAttachInfoInstanceW
 @ stub JetGetAttachInfoW
 @ stub JetGetBookmark
-@ stub JetGetColumnInfo
+@ stdcall JetGetColumnInfo(ptr long str ptr ptr long long)
 @ stub JetGetColumnInfoA
 @ stub JetGetColumnInfoW
 @ stub JetGetCounter
@@ -150,7 +150,7 @@
 @ stub JetGetDatabaseFileInfo
 @ stub JetGetDatabaseFileInfoA
 @ stub JetGetDatabaseFileInfoW
-@ stub JetGetDatabaseInfo
+@ stdcall JetGetDatabaseInfo(ptr long ptr long long)
 @ stub JetGetDatabaseInfoA
 @ stub JetGetDatabaseInfoW
 @ stub JetGetDatabasePages
@@ -181,19 +181,19 @@
 @ stub JetGetObjectInfoW
 @ stub JetGetPageInfo2
 @ stub JetGetPageInfo
-@ stub JetGetRecordPosition
+@ stdcall JetGetRecordPosition(ptr ptr ptr long)
 @ stub JetGetRecordSize2
 @ stub JetGetRecordSize
 @ stub JetGetResourceParam
 @ stub JetGetSecondaryIndexBookmark
 @ stub JetGetSessionInfo
-@ stub JetGetSystemParameter
+@ stdcall JetGetSystemParameter(ptr ptr long ptr ptr long)
 @ stub JetGetSystemParameterA
 @ stub JetGetSystemParameterW
-@ stub JetGetTableColumnInfo
+@ stdcall JetGetTableColumnInfo(ptr ptr ptr ptr long long)
 @ stub JetGetTableColumnInfoA
 @ stub JetGetTableColumnInfoW
-@ stub JetGetTableIndexInfo
+@ stdcall JetGetTableIndexInfo(ptr ptr str ptr long long)
 @ stub JetGetTableIndexInfoA
 @ stub JetGetTableIndexInfoW
 @ stub JetGetTableInfo
@@ -207,17 +207,17 @@
 @ stub JetGotoBookmark
 @ stub JetGotoPosition
 @ stub JetGotoSecondaryIndexBookmark
-@ stub JetGrowDatabase
-@ stub JetIdle
+@ stdcall JetGrowDatabase(ptr long long ptr)
+@ stdcall JetIdle(ptr long)
 @ stub JetIndexRecordCount
 @ stub JetInit2
 @ stub JetInit3
 @ stub JetInit3A
 @ stub JetInit3W
-@ stub JetInit
+@ stdcall JetInit(ptr)
 @ stub JetIntersectIndexes
-@ stub JetMakeKey
-@ stub JetMove
+@ stdcall JetMakeKey(ptr ptr ptr long long)
+@ stdcall JetMove(ptr ptr long long)
 @ stub JetOSSnapshotAbort
 @ stub JetOSSnapshotEnd
 @ stub JetOSSnapshotFreeze
@@ -231,7 +231,7 @@
 @ stub JetOSSnapshotThaw
 @ stub JetOSSnapshotTruncateLog
 @ stub JetOSSnapshotTruncateLogInstance
-@ stub JetOpenDatabase
+@ stdcall JetOpenDatabase(ptr str str ptr long)
 @ stub JetOpenDatabaseA
 @ stub JetOpenDatabaseW
 @ stub JetOpenFile
@@ -243,7 +243,7 @@
 @ stub JetOpenFileSectionInstanceA
 @ stub JetOpenFileSectionInstanceW
 @ stub JetOpenFileW
-@ stub JetOpenTable
+@ stdcall JetOpenTable(ptr long str ptr long long ptr)
 @ stub JetOpenTableA
 @ stub JetOpenTableW
 @ stub JetOpenTempTable2
@@ -254,7 +254,7 @@
 @ stub JetPatchDatabasePagesA
 @ stub JetPatchDatabasePagesW
 @ stub JetPrepareToCommitTransaction
-@ stub JetPrepareUpdate
+@ stdcall JetPrepareUpdate(ptr ptr long)
 @ stub JetPrereadKeys
 @ stub JetReadFile
 @ stub JetReadFileInstance
@@ -268,28 +268,28 @@
 @ stub JetRenameTableA
 @ stub JetRenameTableW
 @ stub JetResetCounter
-@ stub JetResetSessionContext
+@ stdcall JetResetSessionContext(ptr)
 @ stub JetResetTableSequential
 @ stub JetRestore2
 @ stub JetRestore2A
 @ stub JetRestore2W
 @ stub JetRestore
 @ stub JetRestoreA
-@ stub JetRestoreInstance
+@ stdcall JetRestoreInstance(ptr str str ptr)
 @ stub JetRestoreInstanceA
 @ stub JetRestoreInstanceW
 @ stub JetRestoreW
-@ stub JetRetrieveColumn
-@ stub JetRetrieveColumns
-@ stub JetRetrieveKey
+@ stdcall JetRetrieveColumn(ptr ptr long ptr long ptr long ptr)
+@ stdcall JetRetrieveColumns(ptr ptr ptr long)
+@ stdcall JetRetrieveKey(ptr ptr ptr long ptr long)
 @ stub JetRetrieveTaggedColumnList
-@ stub JetRollback
-@ stub JetSeek
-@ stub JetSetColumn
+@ stdcall JetRollback(ptr long)
+@ stdcall JetSeek(ptr ptr long)
+@ stdcall JetSetColumn(ptr ptr long ptr long long ptr)
 @ stub JetSetColumnDefaultValue
 @ stub JetSetColumnDefaultValueA
 @ stub JetSetColumnDefaultValueW
-@ stub JetSetColumns
+@ stdcall JetSetColumns(ptr ptr ptr long)
 @ stub JetSetCurrentIndex2
 @ stub JetSetCurrentIndex2A
 @ stub JetSetCurrentIndex2W
@@ -299,18 +299,18 @@
 @ stub JetSetCurrentIndex4
 @ stub JetSetCurrentIndex4A
 @ stub JetSetCurrentIndex4W
-@ stub JetSetCurrentIndex
+@ stdcall JetSetCurrentIndex(ptr ptr str)
 @ stub JetSetCurrentIndexA
 @ stub JetSetCurrentIndexW
 @ stub JetSetDatabaseSize
 @ stub JetSetDatabaseSizeA
 @ stub JetSetDatabaseSizeW
-@ stub JetSetIndexRange
+@ stdcall JetSetIndexRange(ptr ptr long)
 @ stub JetSetLS
 @ stub JetSetMaxDatabaseSize
 @ stub JetSetResourceParam
-@ stub JetSetSessionContext
-@ stub JetSetSystemParameter
+@ stdcall JetSetSessionContext(ptr ptr)
+@ stdcall JetSetSystemParameter(ptr ptr long ptr str)
 @ stub JetSetSystemParameterA
 @ stub JetSetSystemParameterW
 @ stub JetSetTableSequential
@@ -319,18 +319,18 @@
 @ stub JetSnapshotStartW
 @ stub JetSnapshotStop
 @ stub JetStopBackup
-@ stub JetStopBackupInstance
+@ stdcall JetStopBackupInstance(ptr)
 @ stub JetStopService
-@ stub JetStopServiceInstance
-@ stub JetTerm2
-@ stub JetTerm
+@ stdcall JetStopServiceInstance(ptr)
+@ stdcall JetTerm2(ptr long)
+@ stdcall JetTerm(ptr)
 @ stub JetTest
 @ stub JetTracing
 @ stub JetTruncateLog
 @ stub JetTruncateLogInstance
 @ stub JetUnregisterCallback
 @ stub JetUpdate2
-@ stub JetUpdate
+@ stdcall JetUpdate(ptr ptr ptr long ptr)
 @ stub JetUpgradeDatabase
 @ stub JetUpgradeDatabaseA
 @ stub JetUpgradeDatabaseW

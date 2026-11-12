@@ -1,3 +1,6 @@
-MODULE = esent.dll
+MODULE    = esent.dll
 
 EXTRADLLFLAGS = -Wb,--prefer-native
+
+SOURCES = \
+	esent.c

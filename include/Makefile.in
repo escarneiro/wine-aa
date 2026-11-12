@@ -329,6 +329,7 @@ SOURCES = \
 	errorrep.h \
 	errors.h \
 	errrec.idl \
+	esent.h \
 	evcode.h \
 	eventtoken.idl \
 	evntprov.h \
