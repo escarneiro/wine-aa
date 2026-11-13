@@ -94,11 +94,18 @@ jobs:
           This pull request closes by itself once master contains the merge."
           fi
 
-          number=$(gh pr list --head upstream-sync --base master --state open --json number --jq '.[0].number')
+          # wine-aa is a fork: without --repo, gh would use the parent repository.
+          repo="$GITHUB_REPOSITORY"
+          report() { echo "::error title=gh $1 failed::$(tr '\n' ' ' < gh.log)"; exit 1; }
+
+          number=$(gh pr list --repo "$repo" --head upstream-sync --base master --state open \
+                     --json number --jq '.[0].number' 2> gh.log) || report "pr list"
           if [ -n "$number" ]; then
-            gh pr edit "$number" --title "Merge upstream Wine $VERSION" --body "$body"
+            gh pr edit "$number" --repo "$repo" --title "Merge upstream Wine $VERSION" --body "$body" \
+              > /dev/null 2> gh.log || report "pr edit"
           else
-            gh pr create --head upstream-sync --base master --title "Merge upstream Wine $VERSION" --body "$body"
+            gh pr create --repo "$repo" --head upstream-sync --base master \
+              --title "Merge upstream Wine $VERSION" --body "$body" 2> gh.log || report "pr create"
           fi
 
   test:
