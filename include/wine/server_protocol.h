@@ -911,8 +911,8 @@ struct monitor_info
     struct rectangle raw;
     struct rectangle virt;
     unsigned int     flags;
-    struct ratio     dpi;
-    struct ratio     raw_dpi;
+    unsigned int     dpi;
+    struct ratio     scale;
 };
 #define MONITOR_FLAG_PRIMARY  0x01
 #define MONITOR_FLAG_CLONE    0x02
@@ -1069,12 +1069,19 @@ typedef volatile struct
     char                 extra[];
 } class_shm_t;
 
+struct window_style
+{
+    unsigned int         ws;
+    unsigned int         ex;
+};
+
 struct window_info
 {
     lparam_t             id;
     mod_handle_t         instance;
     lparam_t             user_data;
     client_ptr_t         wndproc;
+    struct window_style  style;
 };
 
 typedef volatile struct
@@ -1084,8 +1091,8 @@ typedef volatile struct
     unsigned int         fnid;
     unsigned int         ansi;
     int                  __pad;
-    struct ratio         dpi;
-    struct ratio         raw_dpi;
+    unsigned int         dpi;
+    struct ratio         scale;
     data_size_t          private_size;
     data_size_t          extra_size;
     struct window_info   info;
@@ -3552,8 +3559,8 @@ struct create_window_request
     unsigned int   style;
     unsigned int   ex_style;
     unsigned int   ansi;
-    struct ratio   dpi;
-    struct ratio   raw_dpi;
+    unsigned int   dpi;
+    struct ratio   scale;
     /* VARARG(class,unicode_str); */
 };
 struct create_window_reply
@@ -3749,7 +3756,7 @@ struct get_window_children_from_point_request
     user_handle_t  parent;
     int            x;
     int            y;
-    struct ratio   dpi;
+    unsigned int   dpi;
     char __pad_28[4];
 };
 struct get_window_children_from_point_reply
@@ -3810,7 +3817,7 @@ struct get_window_rectangles_request
     struct request_header __header;
     user_handle_t  handle;
     int            relative;
-    struct ratio   dpi;
+    unsigned int   dpi;
 };
 struct get_window_rectangles_reply
 {
@@ -3862,7 +3869,7 @@ struct get_windows_offset_request
     struct request_header __header;
     user_handle_t  from;
     user_handle_t  to;
-    struct ratio   dpi;
+    unsigned int   dpi;
 };
 struct get_windows_offset_reply
 {
@@ -6066,6 +6073,25 @@ struct get_inproc_alert_fd_reply
 };
 
 
+struct fd_desc
+{
+    int type;
+    int format;
+    union
+    {
+        struct
+        {
+            unsigned __int64 modifier;
+            int offset;
+            int stride;
+        } dma_buf;
+    };
+};
+#define FD_NONE       0
+#define FD_OPAQUE     1
+#define FD_DMA_BUF    2
+
+
 
 struct d3dkmt_object_create_request
 {
@@ -6073,6 +6099,7 @@ struct d3dkmt_object_create_request
     unsigned int        type;
     int                 fd;
     char __pad_20[4];
+    struct fd_desc      fd_desc;
     unsigned __int64    value;
     /* VARARG(runtime,bytes); */
 };
@@ -6128,9 +6155,10 @@ struct d3dkmt_object_open_reply
     struct reply_header __header;
     d3dkmt_handle_t     global;
     obj_handle_t        handle;
+    struct fd_desc      fd_desc;
     data_size_t         runtime_size;
     /* VARARG(runtime,bytes); */
-    char __pad_20[4];
+    char __pad_44[4];
 };
 
 
@@ -7197,6 +7225,6 @@ union generic_reply
     struct alpc_create_port_reply alpc_create_port_reply;
 };
 
-#define SERVER_PROTOCOL_VERSION 979
+#define SERVER_PROTOCOL_VERSION 984
 
 #endif /* __WINE_WINE_SERVER_PROTOCOL_H */

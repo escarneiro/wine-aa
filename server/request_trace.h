@@ -8,6 +8,7 @@
 static void dump_abstime( const char *prefix, const abstime_t *val );
 static void dump_apc_result( const char *prefix, const union apc_result *val );
 static void dump_async_data( const char *prefix, const struct async_data *val );
+static void dump_fd_desc( const char *prefix, const struct fd_desc *val );
 static void dump_generic_map( const char *prefix, const struct generic_map *val );
 static void dump_hw_input( const char *prefix, const union hw_input *val );
 static void dump_ioctl_code( const char *prefix, const ioctl_code_t *val );
@@ -1712,8 +1713,8 @@ static void dump_create_window_request( const struct create_window_request *req 
     fprintf( stderr, ", style=%08x", req->style );
     fprintf( stderr, ", ex_style=%08x", req->ex_style );
     fprintf( stderr, ", ansi=%08x", req->ansi );
-    dump_ratio( ", dpi=", &req->dpi );
-    dump_ratio( ", raw_dpi=", &req->raw_dpi );
+    fprintf( stderr, ", dpi=%08x", req->dpi );
+    dump_ratio( ", scale=", &req->scale );
     dump_varargs_unicode_str( ", class=", cur_size );
 }
 
@@ -1851,7 +1852,7 @@ static void dump_get_window_children_from_point_request( const struct get_window
     fprintf( stderr, " parent=%08x", req->parent );
     fprintf( stderr, ", x=%d", req->x );
     fprintf( stderr, ", y=%d", req->y );
-    dump_ratio( ", dpi=", &req->dpi );
+    fprintf( stderr, ", dpi=%08x", req->dpi );
 }
 
 static void dump_get_window_children_from_point_reply( const struct get_window_children_from_point_reply *req )
@@ -1899,7 +1900,7 @@ static void dump_get_window_rectangles_request( const struct get_window_rectangl
 {
     fprintf( stderr, " handle=%08x", req->handle );
     fprintf( stderr, ", relative=%d", req->relative );
-    dump_ratio( ", dpi=", &req->dpi );
+    fprintf( stderr, ", dpi=%08x", req->dpi );
 }
 
 static void dump_get_window_rectangles_reply( const struct get_window_rectangles_reply *req )
@@ -1930,7 +1931,7 @@ static void dump_get_windows_offset_request( const struct get_windows_offset_req
 {
     fprintf( stderr, " from=%08x", req->from );
     fprintf( stderr, ", to=%08x", req->to );
-    dump_ratio( ", dpi=", &req->dpi );
+    fprintf( stderr, ", dpi=%08x", req->dpi );
 }
 
 static void dump_get_windows_offset_reply( const struct get_windows_offset_reply *req )
@@ -3416,6 +3417,7 @@ static void dump_d3dkmt_object_create_request( const struct d3dkmt_object_create
 {
     fprintf( stderr, " type=%08x", req->type );
     fprintf( stderr, ", fd=%d", req->fd );
+    dump_fd_desc( ", fd_desc=", &req->fd_desc );
     dump_uint64( ", value=", &req->value );
     dump_varargs_bytes( ", runtime=", cur_size );
 }
@@ -3456,6 +3458,7 @@ static void dump_d3dkmt_object_open_reply( const struct d3dkmt_object_open_reply
 {
     fprintf( stderr, " global=%08x", req->global );
     fprintf( stderr, ", handle=%04x", req->handle );
+    dump_fd_desc( ", fd_desc=", &req->fd_desc );
     fprintf( stderr, ", runtime_size=%u", req->runtime_size );
     dump_varargs_bytes( ", runtime=", cur_size );
 }
