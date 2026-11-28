@@ -313,6 +313,18 @@ typedef enum _POOL_TYPE {
   MaxPoolType
 } POOL_TYPE;
 
+typedef enum _EX_POOL_PRIORITY {
+  LowPoolPriority = 0,
+  LowPoolPrioritySpecialPoolOverrun = 8,
+  LowPoolPrioritySpecialPoolUnderrun = 9,
+  NormalPoolPriority = 16,
+  NormalPoolPrioritySpecialPoolOverrun = 24,
+  NormalPoolPrioritySpecialPoolUnderrun = 25,
+  HighPoolPriority = 32,
+  HighPoolPrioritySpecialPoolOverrun = 40,
+  HighPoolPrioritySpecialPoolUnderrun = 41
+} EX_POOL_PRIORITY;
+
 typedef ULONG64 POOL_FLAGS;
 
 #define POOL_FLAG_REQUIRED_START        0x00000001
@@ -1472,12 +1484,13 @@ typedef struct _KUSER_SHARED_DATA {
     LARGE_INTEGER TimeZoneBiasEffectiveStart;              /* 0x3c8 */
     LARGE_INTEGER TimeZoneBiasEffectiveEnd;                /* 0x3d0 */
     XSTATE_CONFIGURATION XState;                           /* 0x3d8 */
-    KSYSTEM_TIME FeatureConfigurationChangeStamp;          /* 0x720 */
-    ULONG Spare;
     ULONG64 UserPointerAuthMask;                           /* 0x730 */
+    XSTATE_CONFIGURATION XStateArm64;                      /* 0x738 */
+    KSYSTEM_TIME FeatureConfigurationChangeStamp;          /* 0xa90 */
+    ULONG Spare;                                           /* 0xa9c */
 } KUSER_SHARED_DATA, *PKUSER_SHARED_DATA;
 
-C_ASSERT( sizeof(KUSER_SHARED_DATA) == 0x738 );
+C_ASSERT( sizeof(KUSER_SHARED_DATA) == 0xaa0 );
 
 #define SHARED_GLOBAL_FLAGS_QPC_BYPASS_ENABLED 0x01
 #define SHARED_GLOBAL_FLAGS_QPC_BYPASS_USE_HV_PAGE 0x02
@@ -1861,6 +1874,7 @@ PVOID     WINAPI ExAllocatePool2(POOL_FLAGS,SIZE_T,ULONG) __WINE_ALLOC_SIZE(2) _
 PVOID     WINAPI ExAllocatePoolWithQuota(POOL_TYPE,SIZE_T) __WINE_ALLOC_SIZE(2) __WINE_DEALLOC(ExFreePool) __WINE_MALLOC;
 void      WINAPI ExFreePoolWithTag(PVOID,ULONG);
 PVOID     WINAPI ExAllocatePoolWithTag(POOL_TYPE,SIZE_T,ULONG) __WINE_ALLOC_SIZE(2) __WINE_DEALLOC(ExFreePoolWithTag) __WINE_MALLOC;
+PVOID     WINAPI ExAllocatePoolWithTagPriority(POOL_TYPE,SIZE_T,ULONG,EX_POOL_PRIORITY) __WINE_ALLOC_SIZE(2) __WINE_DEALLOC(ExFreePoolWithTag) __WINE_MALLOC;
 PVOID     WINAPI ExAllocatePoolWithQuotaTag(POOL_TYPE,SIZE_T,ULONG) __WINE_ALLOC_SIZE(2) __WINE_DEALLOC(ExFreePoolWithTag) __WINE_MALLOC;
 void      WINAPI ExDeleteNPagedLookasideList(PNPAGED_LOOKASIDE_LIST);
 void      WINAPI ExDeletePagedLookasideList(PPAGED_LOOKASIDE_LIST);

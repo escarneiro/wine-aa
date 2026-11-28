@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Zhiyi Zhang for CodeWeavers
+ * Copyright 2026 Alistair Leslie-Hughes
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -16,11 +16,15 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA
  */
 
-#ifndef __VKD3D_UTF8_H
-#define __VKD3D_UTF8_H
+/* just a wrapper for propsys.idl */
 
-#include "vkd3d_common.h"
+#pragma makedep proxy
+#pragma makedep register
 
-char *vkd3d_strdup_w_utf8(const WCHAR *wstr, size_t wchar_size);
+#include "propsys.idl"
 
-#endif /* __VKD3D_UTF8_H */
+[
+    threading(both),
+    uuid(F562A2C8-E850-4F05-8E7A-E7192E4E6C23)
+]
+coclass PSFactoryBuffer { interface IPSFactoryBuffer; }

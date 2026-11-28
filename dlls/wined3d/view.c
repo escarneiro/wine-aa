@@ -273,7 +273,9 @@ static void create_texture_view(struct wined3d_gl_view *view, GLenum view_target
     context_release(context);
 }
 
-static void create_buffer_texture(struct wined3d_gl_view *view, struct wined3d_context_gl *context_gl,
+/* Returns false if the view can't be created, in which case the caller must
+ * not add it to buffer->buffer_object->users. */
+static bool create_buffer_texture(struct wined3d_gl_view *view, struct wined3d_context_gl *context_gl,
         struct wined3d_buffer *buffer, const struct wined3d_format_gl *view_format_gl,
         unsigned int offset, unsigned int size)
 {
@@ -283,7 +285,7 @@ static void create_buffer_texture(struct wined3d_gl_view *view, struct wined3d_c
     if (!gl_info->supported[ARB_TEXTURE_BUFFER_OBJECT])
     {
         FIXME("OpenGL implementation does not support buffer textures.\n");
-        return;
+        return false;
     }
 
     wined3d_buffer_load_location(buffer, &context_gl->c, WINED3D_LOCATION_BUFFER);
@@ -294,7 +296,7 @@ static void create_buffer_texture(struct wined3d_gl_view *view, struct wined3d_c
     {
         FIXME("Buffer offset %u is not %u byte aligned.\n",
                 offset, gl_info->limits.texture_buffer_offset_alignment);
-        return;
+        return true;
     }
 
     view->target = GL_TEXTURE_BUFFER;
@@ -318,6 +320,7 @@ static void create_buffer_texture(struct wined3d_gl_view *view, struct wined3d_c
 
     context_invalidate_compute_state(&context_gl->c, STATE_COMPUTE_SHADER_RESOURCE_BINDING);
     context_invalidate_state(&context_gl->c, STATE_GRAPHICS_SHADER_RESOURCE_BINDING);
+    return true;
 }
 
 static void get_buffer_view_range(const struct wined3d_buffer *buffer,
@@ -336,14 +339,15 @@ static void get_buffer_view_range(const struct wined3d_buffer *buffer,
     }
 }
 
-static void create_buffer_view(struct wined3d_gl_view *view, struct wined3d_context *context,
+static bool create_buffer_view(struct wined3d_gl_view *view, struct wined3d_context *context,
         const struct wined3d_view_desc *desc, struct wined3d_buffer *buffer,
         const struct wined3d_format *view_format)
 {
     unsigned int offset, size;
 
     get_buffer_view_range(buffer, desc, view_format, &offset, &size);
-    create_buffer_texture(view, wined3d_context_gl(context), buffer, wined3d_format_gl(view_format), offset, size);
+    return create_buffer_texture(view, wined3d_context_gl(context), buffer,
+            wined3d_format_gl(view_format), offset, size);
 }
 
 static void wined3d_view_invalidate_location(struct wined3d_resource *resource,
@@ -590,6 +594,9 @@ static void wined3d_render_target_view_gl_cs_init(void *object)
     struct wined3d_rendertarget_view_gl *view_gl = object;
     struct wined3d_resource *resource = view_gl->v.resource;
     const struct wined3d_view_desc *desc = &view_gl->v.desc;
+    struct wined3d_texture **back_buffers;
+    struct wined3d_swapchain *swapchain;
+    unsigned int i;
 
     TRACE("view_gl %p.\n", view_gl);
 
@@ -620,13 +627,15 @@ static void wined3d_render_target_view_gl_cs_init(void *object)
                         debug_d3dformat(resource->format->id), debug_d3dformat(view_gl->v.format->id));
                 return;
             }
-            if (texture_gl->t.swapchain && texture_gl->t.swapchain->state.desc.backbuffer_count > 1)
-            {
-                FIXME("Swapchain views not supported.\n");
-                return;
-            }
 
-            create_texture_view(&view_gl->gl_view, texture_gl->target, desc, texture_gl, view_gl->v.format);
+            create_texture_view(&view_gl->gl_view[0], texture_gl->target, desc, texture_gl, view_gl->v.format);
+            for (i = 1; i < view_gl->view_count; ++i)
+            {
+                swapchain = texture_gl->t.swapchain;
+                back_buffers = swapchain->back_buffers;
+                create_texture_view(&view_gl->gl_view[i], texture_gl->target, desc,
+                        wined3d_texture_gl(back_buffers[i]), view_gl->v.format);
+            }
         }
     }
 }
@@ -898,12 +907,15 @@ static void wined3d_render_target_view_vk_cs_init(void *object)
 {
     struct wined3d_rendertarget_view_vk *view_vk = object;
     struct wined3d_view_desc *desc = &view_vk->v.desc;
+    struct wined3d_texture **back_buffers = NULL;
+    struct wined3d_swapchain *swapchain = NULL;
     const struct wined3d_format_vk *format_vk;
     struct wined3d_texture_vk *texture_vk;
     struct wined3d_resource *resource;
     struct wined3d_context *context;
     VkImageUsageFlags vk_usage = 0;
     uint32_t default_flags = 0;
+    unsigned int i;
 
     TRACE("view_vk %p.\n", view_vk);
 
@@ -930,26 +942,37 @@ static void wined3d_render_target_view_vk_cs_init(void *object)
         return;
     }
 
-    if (texture_vk->t.swapchain && texture_vk->t.swapchain->state.desc.backbuffer_count > 1)
-    {
-        FIXME("Swapchain views not supported.\n");
-        return;
-    }
-
     if (resource->bind_flags & WINED3D_BIND_RENDER_TARGET)
         vk_usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     if (resource->bind_flags & WINED3D_BIND_DEPTH_STENCIL)
         vk_usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
     context = context_acquire(resource->device, NULL, 0);
-    view_vk->vk_image_view = wined3d_view_vk_create_vk_image_view(wined3d_context_vk(context),
+
+    view_vk->vk_image_view[0] = wined3d_view_vk_create_vk_image_view(wined3d_context_vk(context),
             desc, texture_vk, format_vk, COLOR_FIXUP_IDENTITY, true, vk_usage);
+    if (!view_vk->vk_image_view[0])
+        goto release;
+
+    TRACE("Created image view 0x%s.\n", wine_dbgstr_longlong(view_vk->vk_image_view[0]));
+
+    for (i = 1; i < view_vk->view_count; ++i)
+    {
+        /* A RTV can only be created on backbuffer 0, not higher buffers. So we don't have to worry
+         * about a start offset here. */
+        swapchain = texture_vk->t.swapchain;
+        back_buffers = swapchain->back_buffers;
+        texture_vk = wined3d_texture_vk(back_buffers[i]);
+        view_vk->vk_image_view[i] = wined3d_view_vk_create_vk_image_view(wined3d_context_vk(context),
+                desc, texture_vk, format_vk, COLOR_FIXUP_IDENTITY, true, vk_usage);
+        if (!view_vk->vk_image_view[i])
+            goto release;
+
+        TRACE("Created image view[%u] 0x%s.\n", i, wine_dbgstr_longlong(view_vk->vk_image_view[i]));
+    }
+
+release:
     context_release(context);
-
-    if (!view_vk->vk_image_view)
-        return;
-
-    TRACE("Created image view 0x%s.\n", wine_dbgstr_longlong(view_vk->vk_image_view));
 }
 
 HRESULT wined3d_rendertarget_view_vk_init(struct wined3d_rendertarget_view_vk *view_vk,
@@ -1063,12 +1086,14 @@ void wined3d_shader_resource_view_gl_update(struct wined3d_shader_resource_view_
         struct wined3d_context_gl *context_gl)
 {
     struct wined3d_buffer *buffer = buffer_from_resource(srv_gl->v.resource);
+    bool created;
 
     assert(!srv_gl->bo_user.valid);
 
-    create_buffer_view(&srv_gl->gl_view, &context_gl->c, &srv_gl->v.desc, buffer, srv_gl->v.format);
+    created = create_buffer_view(&srv_gl->gl_view, &context_gl->c, &srv_gl->v.desc, buffer, srv_gl->v.format);
     srv_gl->bo_user.valid = true;
-    list_add_head(&buffer->buffer_object->users, &srv_gl->bo_user.entry);
+    if (created)
+        list_add_head(&buffer->buffer_object->users, &srv_gl->bo_user.entry);
 }
 
 static void wined3d_shader_resource_view_gl_cs_init(void *object)
@@ -1090,11 +1115,13 @@ static void wined3d_shader_resource_view_gl_cs_init(void *object)
     {
         struct wined3d_buffer *buffer = buffer_from_resource(resource);
         struct wined3d_context *context;
+        bool created;
 
         context = context_acquire(resource->device, NULL, 0);
-        create_buffer_view(&view_gl->gl_view, context, desc, buffer, view_format);
+        created = create_buffer_view(&view_gl->gl_view, context, desc, buffer, view_format);
         view_gl->bo_user.valid = true;
-        list_add_head(&buffer->buffer_object->users, &view_gl->bo_user.entry);
+        if (created)
+            list_add_head(&buffer->buffer_object->users, &view_gl->bo_user.entry);
         context_release(context);
     }
     else
@@ -1788,6 +1815,7 @@ void wined3d_unordered_access_view_gl_clear(struct wined3d_unordered_access_view
         wined3d_buffer_acquire_bo_for_write(buffer, &context_gl->c);
         wined3d_buffer_load_location(buffer, &context_gl->c, WINED3D_LOCATION_BUFFER);
     }
+    wined3d_buffer_validate_location(buffer, WINED3D_LOCATION_BUFFER);
     wined3d_unordered_access_view_invalidate_location(&view_gl->v, ~WINED3D_LOCATION_BUFFER);
 
     bo_gl = wined3d_bo_gl(buffer->buffer_object);
@@ -1841,11 +1869,13 @@ void wined3d_unordered_access_view_gl_update(struct wined3d_unordered_access_vie
         struct wined3d_context_gl *context_gl)
 {
     struct wined3d_buffer *buffer = buffer_from_resource(uav_gl->v.resource);
+    bool created;
 
     assert(!uav_gl->bo_user.valid);
-    create_buffer_view(&uav_gl->gl_view, &context_gl->c, &uav_gl->v.desc, buffer, uav_gl->v.format);
+    created = create_buffer_view(&uav_gl->gl_view, &context_gl->c, &uav_gl->v.desc, buffer, uav_gl->v.format);
     uav_gl->bo_user.valid = true;
-    list_add_head(&buffer->buffer_object->users, &uav_gl->bo_user.entry);
+    if (created)
+        list_add_head(&buffer->buffer_object->users, &uav_gl->bo_user.entry);
 }
 
 static void wined3d_unordered_access_view_gl_cs_init(void *object)
@@ -1864,11 +1894,13 @@ static void wined3d_unordered_access_view_gl_cs_init(void *object)
         struct wined3d_device_gl *device_gl = wined3d_device_gl(resource->device);
         struct wined3d_buffer *buffer = buffer_from_resource(resource);
         struct wined3d_context_gl *context_gl;
+        bool created;
 
         context_gl = wined3d_context_gl(context_acquire(&device_gl->d, NULL, 0));
-        create_buffer_view(&view_gl->gl_view, &context_gl->c, desc, buffer, view_gl->v.format);
+        created = create_buffer_view(&view_gl->gl_view, &context_gl->c, desc, buffer, view_gl->v.format);
         view_gl->bo_user.valid = true;
-        list_add_head(&buffer->buffer_object->users, &view_gl->bo_user.entry);
+        if (created)
+            list_add_head(&buffer->buffer_object->users, &view_gl->bo_user.entry);
         if (desc->flags & (WINED3D_VIEW_BUFFER_COUNTER | WINED3D_VIEW_BUFFER_APPEND))
         {
             struct wined3d_bo_gl *bo = &view_gl->counter_bo;

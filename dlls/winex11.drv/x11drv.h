@@ -195,7 +195,7 @@ extern HBRUSH X11DRV_SelectBrush( PHYSDEV dev, HBRUSH hbrush, const struct brush
 extern HPEN X11DRV_SelectPen( PHYSDEV dev, HPEN hpen, const struct brush_pattern *pattern );
 extern COLORREF X11DRV_SetDCBrushColor( PHYSDEV dev, COLORREF crColor );
 extern COLORREF X11DRV_SetDCPenColor( PHYSDEV dev, COLORREF crColor );
-extern void X11DRV_SetDeviceClipping( PHYSDEV dev, HRGN rgn );
+extern void X11DRV_SetDeviceClipping( PHYSDEV dev, HRGN rgn, HRGN monitor_rgn );
 extern UINT X11DRV_SetDeviceGammaRamp( PHYSDEV dev, LPVOID ramp );
 extern COLORREF X11DRV_SetPixel( PHYSDEV dev, INT x, INT y, COLORREF color );
 extern BOOL X11DRV_StretchBlt( PHYSDEV dst_dev, struct bitblt_coords *dst,
@@ -482,7 +482,6 @@ extern BOOL keyboard_grabbed;
 extern unsigned int screen_bpp;
 extern BOOL usexrandr;
 extern BOOL usexvidmode;
-extern BOOL use_egl;
 extern BOOL use_take_focus;
 extern BOOL use_primary_selection;
 extern BOOL use_system_cursors;
@@ -741,6 +740,7 @@ extern BOOL is_net_supported( Atom atom );
 
 extern Window init_clip_window(void);
 extern void window_set_user_time( struct x11drv_win_data *data, Time time, BOOL init );
+extern void window_clear_padding( struct x11drv_win_data *data );
 extern UINT get_window_net_wm_state( Display *display, Window window );
 extern void make_window_embedded( struct x11drv_win_data *data );
 extern Window create_client_window( HWND hwnd, RECT client_rect, const XVisualInfo *visual, Colormap colormap );
@@ -951,7 +951,7 @@ static inline BOOL is_window_rect_mapped( const RECT *rect )
 
 static inline BOOL lp_to_dp( HDC hdc, POINT *points, INT count )
 {
-    return NtGdiTransformPoints( hdc, points, points, count, NtGdiLPtoDP );
+    return NtGdiTransformPoints( hdc, points, points, count, NtGdiLPtoDPRaw );
 }
 
 static inline UINT get_palette_entries( HPALETTE palette, UINT start, UINT count, PALETTEENTRY *entries )

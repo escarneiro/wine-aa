@@ -609,6 +609,8 @@ static struct work_item * alloc_work_item(struct queue *queue, LONG priority, IR
     struct work_item *item;
 
     item = calloc(1, sizeof(*item));
+    if (!item)
+        return NULL;
 
     item->IUnknown_iface.lpVtbl = &work_item_vtbl;
     item->result = result;
@@ -1211,6 +1213,8 @@ static HRESULT create_async_result(IUnknown *object, IRtwqAsyncCallback *callbac
     if (!out)
         return E_INVALIDARG;
 
+    *out = NULL;
+
     if (!(result = async_result_cache_pop()))
     {
         if (!(result = calloc(1, sizeof(*result))))
@@ -1482,8 +1486,9 @@ HRESULT WINAPI RtwqAddPeriodicCallback(RTWQPERIODICCALLBACK callback, IUnknown *
 
     /* Same period MFGetTimerPeriodicity() returns. */
     hr = queue_submit_timer(queue, result, 0, 10, key ? &workitem_key : NULL);
-
     IRtwqAsyncResult_Release(result);
+    if (FAILED(hr))
+        return hr;
 
     if (key)
         *key = workitem_key;

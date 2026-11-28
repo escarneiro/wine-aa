@@ -73,6 +73,13 @@ enum media_stream_flags
     STREAM_FLAG_STOPPED = 0x8,          /* Received MEStreamStopped */
 };
 
+enum transform_entry_state
+{
+    MFT_STATE_READY = 0,
+    MFT_STATE_DRAINING,
+    MFT_STATE_DRAINED,
+};
+
 struct transform_entry
 {
     struct list entry;
@@ -82,6 +89,7 @@ struct transform_entry
     GUID category;
     BOOL hidden;
     BOOL attributes_initialized;
+    enum transform_entry_state state;
 };
 
 struct media_stream
@@ -770,7 +778,7 @@ HRESULT update_media_type(IMFMediaType *dst_type, IMFMediaType *src_type, BOOL a
 }
 
 static HRESULT source_reader_pull_transform_samples(struct source_reader *reader, struct media_stream *stream,
-        struct transform_entry *entry);
+        struct transform_entry *entry, BOOL drain);
 static HRESULT source_reader_push_transform_samples(struct source_reader *reader, struct media_stream *stream,
         struct transform_entry *entry, IMFSample *sample)
 {
@@ -778,12 +786,12 @@ static HRESULT source_reader_push_transform_samples(struct source_reader *reader
 
     do
     {
-        if (FAILED(hr = source_reader_pull_transform_samples(reader, stream, entry))
+        if (FAILED(hr = source_reader_pull_transform_samples(reader, stream, entry, FALSE))
                 && hr != MF_E_TRANSFORM_NEED_MORE_INPUT)
             return hr;
         if (SUCCEEDED(hr = IMFTransform_ProcessInput(entry->transform, 0, sample, 0)))
         {
-            hr = source_reader_pull_transform_samples(reader, stream, entry);
+            hr = source_reader_pull_transform_samples(reader, stream, entry, FALSE);
             return hr == MF_E_TRANSFORM_NEED_MORE_INPUT ? S_OK : hr;
         }
     }
@@ -879,14 +887,17 @@ static void transform_entry_initialize_attributes(struct source_reader *reader, 
 }
 
 static HRESULT source_reader_pull_transform_samples(struct source_reader *reader, struct media_stream *stream,
-        struct transform_entry *entry)
+        struct transform_entry *entry, BOOL drain)
 {
+    enum transform_entry_state upstream_state = drain ? MFT_STATE_DRAINED : MFT_STATE_READY;
     MFT_OUTPUT_STREAM_INFO stream_info = {0};
     struct transform_entry *next = NULL;
     struct list *ptr;
     DWORD status;
     HRESULT hr;
 
+    if ((ptr = list_prev(&stream->transforms, &entry->entry)))
+        upstream_state = LIST_ENTRY(ptr, struct transform_entry, entry)->state;
     if ((ptr = list_next(&stream->transforms, &entry->entry)))
         next = LIST_ENTRY(ptr, struct transform_entry, entry);
 
@@ -908,6 +919,13 @@ static HRESULT source_reader_pull_transform_samples(struct source_reader *reader
         if (!(stream_info.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES))
                 && FAILED(hr = source_reader_allocate_stream_sample(&stream_info, &out_buffer.pSample)))
             break;
+
+        if (upstream_state == MFT_STATE_DRAINED && entry->state == MFT_STATE_READY)
+        {
+            if (FAILED(hr = IMFTransform_ProcessMessage(entry->transform, MFT_MESSAGE_COMMAND_DRAIN, 0)))
+                WARN("Failed to drain transform %p, hr %#lx\n", entry->transform, hr);
+            entry->state = MFT_STATE_DRAINING;
+        }
 
         if (SUCCEEDED(hr = IMFTransform_ProcessOutput(entry->transform, 0, 1, &out_buffer, &status)))
         {
@@ -931,6 +949,10 @@ static HRESULT source_reader_pull_transform_samples(struct source_reader *reader
 
             entry->pending_flags = 0;
         }
+        else if (entry->state == MFT_STATE_DRAINING && hr == MF_E_TRANSFORM_NEED_MORE_INPUT)
+        {
+            entry->state = MFT_STATE_DRAINED;
+        }
 
         if (hr == MF_E_TRANSFORM_STREAM_CHANGE && SUCCEEDED(hr = IMFTransform_GetOutputCurrentType(entry->transform, 0, &media_type)))
         {
@@ -949,7 +971,7 @@ static HRESULT source_reader_pull_transform_samples(struct source_reader *reader
         if (out_buffer.pEvents)
             IMFCollection_Release(out_buffer.pEvents);
     }
-    while (SUCCEEDED(hr) && next); /* queue only one output sample to avoid transform allocators becoming empty on drain */
+    while (SUCCEEDED(hr) && next); /* output only one sample from the last transform to avoid exhausting its allocator on drain */
 
     return hr;
 }
@@ -964,11 +986,9 @@ static HRESULT source_reader_drain_transform_samples(struct source_reader *reade
     if ((ptr = list_next(&stream->transforms, &entry->entry)))
         next = LIST_ENTRY(ptr, struct transform_entry, entry);
 
-    if (FAILED(hr = IMFTransform_ProcessMessage(entry->transform, MFT_MESSAGE_COMMAND_DRAIN, 0)))
-        WARN("Failed to drain transform %p, hr %#lx\n", entry->transform, hr);
     /* MF_E_SAMPLEALLOCATOR_EMPTY can occur here if many samples are drained
      * from a transform, but it's not an issue if a later call succeeds. */
-    if (FAILED(hr = source_reader_pull_transform_samples(reader, stream, entry))
+    if (FAILED(hr = source_reader_pull_transform_samples(reader, stream, entry, TRUE))
             && hr != MF_E_TRANSFORM_NEED_MORE_INPUT)
         WARN("Failed to pull pending samples, hr %#lx.\n", hr);
 
@@ -987,6 +1007,7 @@ static HRESULT source_reader_flush_transform_samples(struct source_reader *reade
 
     if (FAILED(hr = IMFTransform_ProcessMessage(entry->transform, MFT_MESSAGE_COMMAND_FLUSH, 0)))
         WARN("Failed to flush transform %p, hr %#lx\n", entry->transform, hr);
+    entry->state = MFT_STATE_READY;
 
     return next ? source_reader_flush_transform_samples(reader, stream, next) : S_OK;
 }
@@ -1106,14 +1127,26 @@ static HRESULT source_reader_media_stream_state_handler(struct source_reader *re
                     stream->state = STREAM_STATE_EOS;
                     stream->flags &= ~STREAM_FLAG_SAMPLE_REQUESTED;
 
+                    /* The request which triggered MEEndOfStream is now dangling. If transforms are present,
+                     * complete the dangling request by draining a sample. Subsequent samples will be drained
+                     * in the sample read handler. If draining errors out here (the error is never NEED_INPUT),
+                     * we rely on the app continuing after the error response if it makes sense to do so. For
+                     * example, after a sample allocation failure, requests will succeed once the app has
+                     * released enough samples. Failure should be very rare. */
                     if ((ptr = list_head(&stream->transforms)))
                     {
                         struct transform_entry *entry = LIST_ENTRY(ptr, struct transform_entry, entry);
                         if (FAILED(hr = source_reader_drain_transform_samples(reader, stream, entry)))
+                        {
                             WARN("Failed to drain pending samples, hr %#lx.\n", hr);
+                            if (stream->requests)
+                                source_reader_queue_response(reader, stream, hr, 0, 0, NULL);
+                        }
+                        /* Wake the synchronous reader loop to break on EOS in case nothing was drained. */
+                        if (!reader->async_callback)
+                            WakeAllConditionVariable(&reader->sample_event);
                     }
-
-                    while (stream->requests)
+                    else while (stream->requests)
                         source_reader_queue_response(reader, stream, S_OK, MF_SOURCE_READERF_ENDOFSTREAM, 0, NULL);
 
                     break;
@@ -1361,9 +1394,20 @@ static BOOL source_reader_get_read_result(struct source_reader *reader, struct m
 {
     struct stream_response *response = NULL;
     BOOL request_sample = FALSE;
+    HRESULT hr = S_OK;
     struct list *ptr;
 
-    if ((response = media_stream_pop_response(reader, stream)))
+    if (!(response = media_stream_pop_response(reader, stream)) && stream->state == STREAM_STATE_EOS
+            && (ptr = list_head(&stream->transforms)))
+    {
+        struct transform_entry *entry = LIST_ENTRY(ptr, struct transform_entry, entry);
+
+        /* Try to drain a sample at EOS if transforms are present. Draining one at a time prevents
+         * exhaustion of the allocator in some cases. This call never returns NEED_INPUT. */
+        hr = source_reader_drain_transform_samples(reader, stream, entry);
+    }
+
+    if (response || (response = media_stream_pop_response(reader, stream)))
     {
         *status = response->status;
         *stream_index = stream->index;
@@ -1371,33 +1415,26 @@ static BOOL source_reader_get_read_result(struct source_reader *reader, struct m
         *timestamp = response->timestamp;
         *sample = response->sample;
         if (*sample)
-        {
             IMFSample_AddRef(*sample);
-            if (stream->state == STREAM_STATE_EOS && (ptr = list_head(&stream->transforms)))
-            {
-                struct transform_entry *entry = LIST_ENTRY(ptr, struct transform_entry, entry);
-                /* Try to drain another sample in case the decoder emits many while draining.
-                 * Draining one at a time prevents exhaustion of the allocator in some cases. */
-                source_reader_drain_transform_samples(reader, stream, entry);
-            }
-        }
 
         source_reader_release_response(response);
     }
     else
     {
-        *status = S_OK;
+        *status = hr;
         *stream_index = stream->index;
         *timestamp = 0;
         *sample = NULL;
 
-        if (stream->state == STREAM_STATE_EOS)
+        /* If an error other than NEED_INPUT occurs during draining, we should probably return it and not
+         * flag EOS. This is difficult to test in native because it's highly dependent on decoder behaviour. */
+        if (SUCCEEDED(hr) && stream->state == STREAM_STATE_EOS)
         {
             *stream_flags = MF_SOURCE_READERF_ENDOFSTREAM;
         }
         else
         {
-            request_sample = !(flags & MF_SOURCE_READER_CONTROLF_DRAIN);
+            request_sample = stream->state != STREAM_STATE_EOS && !(flags & MF_SOURCE_READER_CONTROLF_DRAIN);
             *stream_flags = 0;
         }
     }

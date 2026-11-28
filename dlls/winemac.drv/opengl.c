@@ -1147,7 +1147,7 @@ static void macdrv_context_select_drawable(struct macdrv_context *context, struc
     if (drawable && drawable->client)
     {
         struct macdrv_client_surface *surface = impl_from_client_surface(drawable->client);
-        RECT rect = surface->client.virtual_rect;
+        RECT rect = surface->client.raw ? surface->client.monitor_rect : surface->client.virtual_rect;
         macdrv_make_context_current(context->context, surface->cocoa_view, cgrect_from_rect(rect));
         return;
     }
@@ -1849,8 +1849,11 @@ static BOOL macdrv_context_activate(struct opengl_context *base, struct opengl_d
 
     if (NtCurrentTeb()->glReserved2) funcs->p_glFlush();
 
+    /* set the context current before selecting the view, preventing incorrect modification of the context viewport */
+    CGLSetCurrentContext(context->base.host_context);
     macdrv_context_select_drawable(context, draw);
     CGLSetCurrentContext(context->base.host_context);
+
     return TRUE;
 }
 
@@ -2253,6 +2256,16 @@ static BOOL macdrv_surface_swap(struct opengl_drawable *base)
     return TRUE;
 }
 
+static D3DKMT_HANDLE macdrv_texture_export(GLuint texture, D3DKMT_HANDLE *global)
+{
+    return 0;
+}
+
+static BOOL macdrv_texture_import(GLuint texture, D3DKMT_HANDLE local, SIZE size)
+{
+    return FALSE;
+}
+
 static BOOL macdrv_cleanup_thread(void)
 {
     struct macdrv_context *context;
@@ -2274,6 +2287,8 @@ static const struct opengl_driver_funcs macdrv_driver_funcs =
     .p_context_destroy = macdrv_context_destroy,
     .p_context_activate = macdrv_context_activate,
     .p_pbuffer_create = macdrv_pbuffer_create,
+    .p_texture_export = macdrv_texture_export,
+    .p_texture_import = macdrv_texture_import,
     .p_cleanup_thread = macdrv_cleanup_thread,
     .broken_sharing = TRUE,
 };
